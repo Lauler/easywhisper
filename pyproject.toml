@@ -1,0 +1,43 @@
+[build-system]
+requires = ["setuptools>=67.0.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+version = "0.0.1"
+name = "easywhisper"
+
+requires-python = ">= 3.9"
+
+dependencies = [
+  "torch>=2.1.2",
+  "tqdm>=4.66.1",
+]
+
+readme = "README.md"
+
+[project.urls]
+
+[tool.ruff]
+line-length = 99
+indent-width = 4
+
+target-version = "py39"
+
+[tool.ruff.lint]
+# Allow unused variables when underscore-prefixed.
+dummy-variable-rgx = "^(_+|(_+[a-zA-Z0-9_]*[a-zA-Z0-9]+?))$"
+# Disable fix for unused imports (`F401`).
+unfixable = ["F401"]
+
+[tool.ruff.format]
+# Like Black, use double quotes for strings.
+quote-style = "double"
+
+# Like Black, indent with spaces, rather than tabs.
+indent-style = "space"
+
+# Like Black, respect magic trailing commas.
+skip-magic-trailing-comma = false
+
+# Like Black, automatically detect the appropriate line ending.
+line-ending = "auto"
