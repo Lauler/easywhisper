@@ -2,7 +2,6 @@ import subprocess
 
 import ctranslate2
 from huggingface_hub import snapshot_download
-from transformers import WhisperForConditionalGeneration, WhisperProcessor
 
 snapshot_download(
     repo_id="KBLab/kb-whisper-large",

@@ -5,7 +5,6 @@ import torch
 from easyalign.data.collators import (
     audiofile_collate_fn,
     metadata_collate_fn,
-    transcribe_collate_fn,
 )
 from easyalign.data.dataset import AudioFileDataset, JSONMetadataDataset
 from easyalign.pipelines import (
@@ -51,7 +50,7 @@ if __name__ == "__main__":
 
     vad_outputs = vad_pipeline(
         model=model_vad,
-        audio_paths=["statsminister.wav"],
+        audio_paths=["audio_150.wav"],
         audio_dir="data",
         speeches=None,
         chunk_size=30,
@@ -152,3 +151,38 @@ if __name__ == "__main__":
         remove_wildcards=True,
         device="cuda",
     )
+
+    # Write to audio file the start to end slice of all alignment segments
+    import soundfile as sf
+
+    audio_path = Path("data/audio_150.wav")
+    audio, sr = sf.read(audio_path)
+
+    for alignment in alignments:
+        for segment in alignment:
+            start_sample = int(segment.start * sr)
+            end_sample = int(segment.end * sr)
+            segment_audio = audio[start_sample:end_sample]
+            output_path = (
+                Path("output/segments")
+                / f"{audio_path.stem}_{segment.start:.2f}_{segment.end:.2f}.wav"
+            )
+            output_path.parent.mkdir(parents=True, exist_ok=True)
+            sf.write(output_path, segment_audio, sr)
+
+    # Output every word segment
+    for alignments in alignments:
+        for segment in alignments:
+            for word in segment.words:
+                start_sample = int(word.start * sr)
+                end_sample = int(word.end * sr)
+                word_audio = audio[start_sample:end_sample]
+                text = word.text.strip().replace(" ", "_")
+                output_path = (
+                    Path("output/words")
+                    / f"{audio_path.stem}_{text}_{word.start:.2f}_{word.end:.2f}.wav"
+                )
+                output_path.parent.mkdir(parents=True, exist_ok=True)
+                sf.write(output_path, word_audio, sr)
+
+    alignments[0][0].start
