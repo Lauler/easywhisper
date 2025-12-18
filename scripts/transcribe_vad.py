@@ -25,7 +25,7 @@ from transformers import (
     WhisperProcessor,
 )
 
-from easywhisper.transcribe.hf import transcribe
+from easywhisper.asr.hf import transcribe
 
 
 def text_normalizer(text: str) -> str:
@@ -50,7 +50,7 @@ if __name__ == "__main__":
 
     vad_outputs = vad_pipeline(
         model=model_vad,
-        audio_paths=["audio_150.wav"],
+        audio_paths=["YS_sr_p1_2003-09-02_0525_0600.wav"],
         audio_dir="data",
         speeches=None,
         chunk_size=30,

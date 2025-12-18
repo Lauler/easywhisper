@@ -7,7 +7,7 @@ from easyalign.data.collators import audiofile_collate_fn, transcribe_collate_fn
 from easyalign.data.dataset import AudioFileDataset, JSONMetadataDataset
 from transformers import WhisperProcessor
 
-audio, sample_rate = sf.read("data/audio_150.wav")
+audio, sample_rate = sf.read("data/YS_sr_p1_2003-09-02_0525_0600.wav")
 # Compute the features of the first 30 seconds of audio.
 processor = WhisperProcessor.from_pretrained("KBLab/kb-whisper-large")
 # inputs = processor(audio, return_tensors="np", sampling_rate=16000)
@@ -39,7 +39,6 @@ file_dataloader = torch.utils.data.DataLoader(
 prompt = processor.tokenizer.convert_tokens_to_ids(
     [
         "<|startoftranscript|>",
-        "<|sv|>",  # Set the language to Swedish.
         "<|transcribe|>",
         "<|notimestamps|>",  # Remove this token to generate timestamps.
     ]
