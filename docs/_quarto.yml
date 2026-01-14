@@ -1,0 +1,74 @@
+project:
+  type: website
+
+website:
+  title: "easywhisper"
+  navbar:
+    background: light
+    search: true
+    right:
+      - text: "Reference"
+        href: reference/index.qmd
+      - text: "About"
+        href: about.qmd
+
+# tell quarto to read the generated sidebar
+metadata-files:
+  - reference/_sidebar.yml
+
+# tell quarto to read the generated styles
+format:
+  html:
+    css:
+      - reference/_styles-quartodoc.css
+      - styles.css
+
+quartodoc:
+  # the name used to import the package you want to create reference docs for
+  package: easywhisper
+  renderer:
+    style: markdown
+    table_style: table # description-list
+  # write sidebar and style data
+  sidebar: reference/_sidebar.yml
+  css: reference/_styles-quartodoc.css
+
+  sections:
+    - title: Transcription
+      desc: 
+        Transcription pipelines and functions.
+      contents:
+        # the functions being documented in the package.
+        # you can refer to anything: class methods, modules, etc..
+        - pipelines.pipeline
+        - asr.ct2.transcribe
+        - asr.hf.transcribe
+    - title: Datasets
+      desc: 
+        Dataset classes for creating Pytorch DataLoaders. 
+        `from easywhisper.data.streaming import ClassName`
+      package: easywhisper.data.streaming
+      contents:
+        - name: StreamingAudioSliceDataset
+          children: separate
+        - name: StreamingAudioFileDataset
+          children: separate
+    - title: Data Models
+      desc: 
+        Data models for storing transcribed text and metadata. 
+        `from easywhisper.data.datamodel import ClassName`
+      package: easywhisper.data.datamodel
+      contents:
+        - AudioMetadata
+        - SpeechSegment
+        - WordSegment
+        - AlignmentSegment
+        - AudioChunk
+    - title: Text Processing
+      desc: 
+        Text processing utilities. `from easywhisper.text.normalization import function_name`.
+        See also [SpanMapNormalizer](https://lauler.github.io/easyalign/reference/SpanMapNormalizer.html)
+        from [easyalign](https://github.com/lauler/easyalign).
+      package: easywhisper.text
+      contents:
+        - normalization.default_text_normalize

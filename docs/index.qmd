@@ -1,0 +1,5 @@
+---
+title: "easywhisper"
+---
+
+Documentation for the `easywhisper` package.
