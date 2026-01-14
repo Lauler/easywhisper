@@ -1,8 +1,8 @@
 __pycache__/
 _site/
-./data/
-output/
-models/
+/data/
+/output/
+/models/
 reference/
 
 *.egg-info/
