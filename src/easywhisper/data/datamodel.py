@@ -7,15 +7,16 @@ class WordSegment(msgspec.Struct):
     """
     Word-level alignment data.
 
-    Attributes:
-        text:
-            The aligned word's text.
-        start:
-            Start time of the word in seconds.
-        end:
-            End time of the word in seconds.
-        score:
-            Optional confidence score for the word alignment.
+    Attributes
+    ----------
+    text : str
+        The aligned word's text.
+    start : float
+        Start time of the word in seconds.
+    end : float
+        End time of the word in seconds.
+    score : float, optional
+        Optional confidence score for the word alignment.
     """
 
     text: str
@@ -31,15 +32,24 @@ class AudioChunk(msgspec.Struct):
     """
     Segment of audio, usually created by VAD.
 
-    Attributes:
-        start: Start time of the chunk in seconds.
-        end: End time of the chunk in seconds.
-        text: Optional text transcription for the chunk.
-        duration: Duration of the chunk in seconds.
-        audio_frames: Number of audio frames a chunk spans.
-        num_logits: Number of model output logits for the chunk.
-        language: Optional language code for the chunk (used for routing chunks to
-            language-specific models when doing ASR).
+    Attributes
+    ----------
+    start : float
+        Start time of the chunk in seconds.
+    end : float
+        End time of the chunk in seconds.
+    text : str, optional
+        Optional text transcription for the chunk.
+    duration : float, optional
+        Duration of the chunk in seconds.
+    audio_frames : int, optional
+        Number of audio frames a chunk spans.
+    num_logits : int, optional
+        Number of model output logits for the chunk.
+    language : str, optional
+        Language code for the chunk.
+    language_prob : float, optional
+        Probability/confidence of the detected language.
     """
 
     start: float
@@ -49,6 +59,7 @@ class AudioChunk(msgspec.Struct):
     audio_frames: int | None = None
     num_logits: int | None = None
     language: str | None = None
+    language_prob: float | None = None
 
     def to_dict(self):
         return {f: getattr(self, f) for f in self.__struct_fields__}
@@ -68,19 +79,20 @@ class AlignmentSegment(msgspec.Struct):
 
     This can be sentence, paragraph, or any other unit of text.
 
-    Attributes:
-        start:
-            Start time of the aligned segment in seconds.
-        end:
-            End time of the aligned segment in seconds.
-        text:
-            The aligned text segment.
-        words:
-            List of word-level alignment data within this segment.
-        duration:
-            Duration of the aligned segment in seconds.
-        score:
-            Optional confidence score for the alignment.
+    Attributes
+    ----------
+    start : float
+        Start time of the aligned segment in seconds.
+    end : float
+        End time of the aligned segment in seconds.
+    text : str
+        The aligned text segment.
+    words : list[WordSegment]
+        List of word-level alignment data within this segment.
+    duration : float, optional
+        Duration of the aligned segment in seconds.
+    score : float, optional
+        Optional confidence score for the alignment.
     """
 
     start: float  # in seconds
@@ -113,33 +125,34 @@ class SpeechSegment(msgspec.Struct):
     If no SpeechSegment is defined, one will automatically be added, treating the entire
     audio as a single speech.
 
-    Attributes:
-        start:
-            Start time of the speech segment in seconds.
-        end:
-            End time of the speech segment in seconds.
-        text:
-            Optional text transcription (manual, or created by ASR).
-        text_spans:
-            Optional (start_char, end_char) indices in the `text` that allows for a custom
-            segmentation of the text to be aligned to audio. Can for example be used to
-            perform alignment on paragraph, sentence, or other optional levels of granularity.
-        chunks:
-            Audio chunks from which we create w2v2 logits (if `alignment_strategy` is 'chunk').
-            When ASR is used, these chunks will additionally contain the transcribed text of
-            the chunk. The ASR output will be used for forced alignment within the chunk.
-        alignments:
-            Aligned text segments.
-        duration:
-            Duration of the speech segment in seconds.
-        audio_frames:
-            Number of audio frames speech segment spans.
-        speech_id:
-            Optional unique identifier for the speech segment.
-        probs_path:
-            Path to saved wav2vec2 emissions/probs.
-        metadata:
-            Optional extra metadata such as speaker name, etc.
+    Attributes
+    ----------
+    start : float, optional
+        Start time of the speech segment in seconds.
+    end : float, optional
+        End time of the speech segment in seconds.
+    text : str, optional
+        Optional text transcription (manual, or created by ASR).
+    text_spans : list[tuple[int, int]], optional
+        Optional (start_char, end_char) indices in the `text` that allows for a custom
+        segmentation of the text to be aligned to audio. Can for example be used to
+        perform alignment on paragraph, sentence, or other optional levels of granularity.
+    chunks : list[AudioChunk]
+        Audio chunks from which we create w2v2 logits (if `alignment_strategy` is 'chunk').
+        When ASR is used, these chunks will additionally contain the transcribed text of
+        the chunk. The ASR output will be used for forced alignment within the chunk.
+    alignments : list[AlignmentSegment]
+        Aligned text segments.
+    duration : float, optional
+        Duration of the speech segment in seconds.
+    audio_frames : int, optional
+        Number of audio frames speech segment spans.
+    speech_id : str or int, optional
+        Optional unique identifier for the speech segment.
+    probs_path : str, optional
+        Path to saved wav2vec2 emissions/probs.
+    metadata : dict, optional
+        Optional extra metadata such as speaker name, etc.
     """
 
     speech_id: str | int | None = None
@@ -176,6 +189,19 @@ class SpeechSegment(msgspec.Struct):
 class AudioMetadata(msgspec.Struct):
     """
     Data model for the metadata of an audio file.
+
+    Attributes
+    ----------
+    audio_path : str
+        Path to the audio file.
+    sample_rate : int
+        Sample rate of the audio file.
+    duration : float
+        Duration of the audio file in seconds.
+    speeches : list[SpeechSegment], optional
+        List of speech segments in the audio.
+    metadata : dict, optional
+        Optional extra metadata.
     """
 
     audio_path: str

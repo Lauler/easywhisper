@@ -7,67 +7,17 @@ existing metadata (SpeechSegment/AudioChunk start/end times).
 """
 
 import logging
-import subprocess
 from pathlib import Path
 
-import numpy as np
 import torch
+from easyalign.data.datamodel import AudioMetadata
+from easyalign.data.dataset import JSONMetadataDataset
 from torch.utils.data import Dataset
 from transformers import Wav2Vec2Processor, WhisperProcessor
 
-from easyalign.data.datamodel import AudioMetadata
-from easyalign.data.dataset import JSONMetadataDataset
+from easywhisper.audio import read_audio_segment
 
 logger = logging.getLogger(__name__)
-
-
-def read_audio_segment(
-    audio_path: str | Path,
-    start_sec: float,
-    duration_sec: float,
-    sample_rate: int = 16000,
-) -> np.ndarray:
-    """
-    Read a segment of audio using ffmpeg subprocess with seek.
-
-    Uses ffmpeg's fast seek (-ss before -i) to efficiently read only the
-    required segment, with resampling to the target sample rate and mono conversion.
-
-    Args:
-        audio_path: Path to the audio file.
-        start_sec: Start time in seconds.
-        duration_sec: Duration to read in seconds.
-        sample_rate: Target sample rate for resampling.
-
-    Returns:
-        Audio data as float32 numpy array.
-    """
-    cmd = [
-        "ffmpeg",
-        "-ss",
-        str(start_sec),  # Seek to position (before -i = fast seek)
-        "-i",
-        str(audio_path),
-        "-t",
-        str(duration_sec),  # Read this many seconds
-        "-ar",
-        str(sample_rate),  # Resample
-        "-ac",
-        "1",  # Mono
-        "-f",
-        "f32le",  # Raw float32 little-endian output
-        "-loglevel",
-        "error",
-        "pipe:1",  # Output to stdout
-    ]
-
-    try:
-        proc = subprocess.run(cmd, capture_output=True, check=True)
-        audio = np.frombuffer(proc.stdout, dtype=np.float32)
-        return audio
-    except subprocess.CalledProcessError as e:
-        logger.error(f"ffmpeg error reading {audio_path}: {e.stderr.decode()}")
-        raise
 
 
 class StreamingAudioSliceDataset(Dataset):
@@ -77,12 +27,18 @@ class StreamingAudioSliceDataset(Dataset):
     Unlike AudioSliceDataset which holds all features in memory, this dataset
     stores only the chunk metadata and loads audio when __getitem__ is called.
 
-    Args:
-        audio_path: Path to the audio file.
-        chunk_specs: List of dicts with 'start_sec', 'end_sec', 'speech_id' keys.
-        processor: Wav2Vec2Processor or WhisperProcessor for feature extraction.
-        sample_rate: Target sample rate.
-        metadata: AudioMetadata object to pass through.
+    Parameters
+    ----------
+    audio_path : str or Path
+        Path to the audio file.
+    chunk_specs : list of dict
+        List of dicts with 'start_sec', 'end_sec', 'speech_id' keys.
+    processor : transformers.Wav2Vec2Processor or transformers.WhisperProcessor
+        Processor for feature extraction.
+    sample_rate : int, optional
+        Target sample rate.
+    metadata : AudioMetadata, optional
+        AudioMetadata object to pass through.
     """
 
     def __init__(
@@ -145,13 +101,20 @@ class StreamingAudioFileDataset(Dataset):
     Instead of loading entire audio files and chunking in memory, this dataset
     returns a StreamingAudioSliceDataset that lazily loads each chunk via ffmpeg.
 
-    Args:
-        metadata: List of AudioMetadata objects, JSONMetadataDataset, or single AudioMetadata.
-        processor: Wav2Vec2Processor or WhisperProcessor for feature extraction.
-        audio_dir: Base directory for audio files.
-        sample_rate: Target sample rate for resampling.
-        chunk_size: Maximum chunk size in seconds (for speech-based chunking).
-        alignment_strategy: 'speech' or 'chunk' - determines how chunks are defined.
+    Parameters
+    ----------
+    metadata : JSONMetadataDataset or list[AudioMetadata] or AudioMetadata
+        Metadata source.
+    processor : transformers.Wav2Vec2Processor or transformers.WhisperProcessor
+        Processor for feature extraction.
+    audio_dir : str, optional
+        Base directory for audio files.
+    sample_rate : int, optional
+        Target sample rate for resampling.
+    chunk_size : int, optional
+        Maximum chunk size in seconds (for speech-based chunking).
+    alignment_strategy : str, optional
+        'speech' or 'chunk' - determines how chunks are defined.
     """
 
     def __init__(
@@ -161,7 +124,7 @@ class StreamingAudioFileDataset(Dataset):
         audio_dir: str = "data",
         sample_rate: int = 16000,
         chunk_size: int = 30,
-        alignment_strategy: str = "speech",
+        alignment_strategy: str = "chunk",
     ):
         if isinstance(metadata, AudioMetadata):
             self.metadata = [metadata]
@@ -179,6 +142,16 @@ class StreamingAudioFileDataset(Dataset):
         Build chunk specs from SpeechSegments, splitting into chunk_size pieces.
 
         This mirrors the behavior of AudioFileDataset.get_speech_features().
+
+        Parameters
+        ----------
+        metadata : AudioMetadata
+            The audio metadata object.
+
+        Returns
+        -------
+        list[dict]
+            List of chunk specifications.
         """
         chunk_specs = []
         for speech in metadata.speeches:
@@ -211,6 +184,16 @@ class StreamingAudioFileDataset(Dataset):
         Build chunk specs from existing VAD chunks in metadata.
 
         This mirrors the behavior of AudioFileDataset.get_vad_features().
+
+        Parameters
+        ----------
+        metadata : AudioMetadata
+            The audio metadata object.
+
+        Returns
+        -------
+        list[dict]
+            List of chunk specifications.
         """
         chunk_specs = []
         for speech in metadata.speeches:
