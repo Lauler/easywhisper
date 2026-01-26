@@ -151,7 +151,7 @@ def transcribe(
         # Update metadata with transcriptions
         for i, speech in enumerate(metadata.speeches):
             for j, chunk in enumerate(speech.chunks):
-                chunk.text = transcription_texts[j]
+                chunk.text = transcription_texts[j].strip()
                 if len(language_detections) > 0:
                     chunk.language = language_detections[j]["language"]
                     chunk.language_prob = language_detections[j]["probability"]

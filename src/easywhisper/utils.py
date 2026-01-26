@@ -5,9 +5,9 @@ from pathlib import Path
 logger = logging.getLogger(__name__)
 
 
-def hf_to_ct2_converter(model_path):
+def hf_to_ct2_converter(model_path, cache_dir="models"):
     model_name = Path(model_path).stem
-    output_dir = Path("models/ct2/") / model_name
+    output_dir = Path(cache_dir) / "ct2" / model_name
 
     if output_dir.exists():
         logger.info(f"Using existing ctranslate2 model from {output_dir}")
@@ -26,7 +26,7 @@ def hf_to_ct2_converter(model_path):
                 "--model",
                 model_path,
                 "--output_dir",
-                output_dir,
+                str(output_dir),
                 "--copy_files",
                 "tokenizer.json",
                 "--copy_files",

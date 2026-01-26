@@ -2,12 +2,13 @@ import logging
 from pathlib import Path
 
 import ctranslate2
-import google.protobuf.text_encoding
 import torch
 from easyalign.data.collators import audiofile_collate_fn, metadata_collate_fn
 from easyalign.data.datamodel import SpeechSegment
 from easyalign.data.dataset import AudioFileDataset, JSONMetadataDataset, StreamingAudioFileDataset
 from easyalign.pipelines import alignment_pipeline, emissions_pipeline, vad_pipeline
+from easyalign.vad.pyannote import load_vad_model as load_pyannote_vad_model
+from easyalign.vad.silero import load_vad_model as load_silero_vad_model
 from transformers import (
     AutoModelForCTC,
     Wav2Vec2Processor,
@@ -15,11 +16,23 @@ from transformers import (
     WhisperProcessor,
 )
 
-from easywhisper.asr.ct2 import transcribe
+from easywhisper.asr.ct2 import transcribe as ct2_transcribe
+from easywhisper.asr.hf import transcribe as hf_transcribe
 from easywhisper.text.normalization import text_normalizer
 from easywhisper.utils import hf_to_ct2_converter
 
 logger = logging.getLogger(__name__)
+
+# dispatch mapping
+TRANSCRIBE_BACKENDS = {
+    "ct2": ct2_transcribe,
+    "hf": hf_transcribe,
+}
+
+VAD_BACKENDS = {
+    "silero": load_silero_vad_model,
+    "pyannote": load_pyannote_vad_model,
+}
 
 
 def pipeline(
@@ -45,8 +58,8 @@ def pipeline(
     no_repeat_ngram_size: int = 0,
     start_wildcard: bool = False,
     end_wildcard: bool = False,
-    blank_id: int = 0,
-    word_boundary: str = "|",
+    blank_id: int | None = None,
+    word_boundary: str | None = None,
     indent: int = 2,
     ndigits: int = 5,
     batch_size_files: int = 1,
@@ -64,6 +77,8 @@ def pipeline(
     output_transcriptions_dir: str = "output/transcriptions",
     output_emissions_dir: str = "output/emissions",
     output_alignments_dir: str = "output/alignments",
+    cache_dir: str = "models",
+    hf_token: str | None = None,
     device="cuda",
 ):
     """
@@ -113,10 +128,10 @@ def pipeline(
         Add start wildcard to forced alignment.
     end_wildcard : bool, optional
         Add end wildcard to forced alignment.
-    blank_id : int, optional
-        Blank token ID of the emissions model.
-    word_boundary : str, optional
-        Word boundary character of the emissions model.
+    blank_id : int | None, optional
+        Blank token ID of the emissions model (generally the pad token ID).
+    word_boundary : str | None, optional
+        Word boundary character of the emissions model (usually "|").
     indent : int, optional
         JSON indentation.
     ndigits : int, optional
@@ -151,6 +166,10 @@ def pipeline(
         Output directory for emissions.
     output_alignments_dir : str, optional
         Output directory for alignments.
+    cache_dir : str, optional
+        Cache directory for transcription and emissions models.
+    hf_token : str or None, optional
+        Hugging Face authentication token for gated models.
     device : str, optional
         Device to run models on. Default is `cuda`.
 
@@ -160,6 +179,7 @@ def pipeline(
         If `return_alignments` is True, returns a list of alignment mappings for each audio file.
         Otherwise, returns `None` (the alignments are saved to disk only).
     """  # noqa: E501
+    # TODO: Support msgpack throughout the pipeline
     json_paths = [Path(p).with_suffix(".json") for p in audio_paths]
 
     if streaming:
@@ -167,14 +187,16 @@ def pipeline(
     else:
         DatasetClass = AudioFileDataset
 
-    if vad_model == "silero":
-        from easyalign.vad.silero import load_vad_model
-    elif vad_model == "pyannote":
-        from easyalign.vad.pyannote import load_vad_model
-    else:
-        raise ValueError(f"Unknown VAD model: {vad_model}")
+    # Load VAD model
+    assert vad_model in VAD_BACKENDS, (
+        f"VAD model {vad_model} not supported. Choose from {list(VAD_BACKENDS.keys())}."
+    )
 
-    vad_model = load_vad_model(device=device)
+    vad_model_loader = VAD_BACKENDS.get(vad_model)
+    if vad_model == "pyannote":
+        vad_model = vad_model_loader(device=device, token=hf_token)
+    else:
+        vad_model = vad_model_loader()
 
     # Step 1: Run VAD
     vad_pipeline(
@@ -204,7 +226,7 @@ def pipeline(
     }
 
     if backend == "ct2":
-        model_path = hf_to_ct2_converter(transcription_model)
+        model_path = hf_to_ct2_converter(transcription_model, cache_dir=cache_dir)
         logger.info(f"Loading CTranslate2 model from {model_path}...")
         model = ctranslate2.models.Whisper(model_path.as_posix(), device=device)
         transcription_args.update(
@@ -213,15 +235,13 @@ def pipeline(
                 "no_repeat_ngram_size": no_repeat_ngram_size,
             }
         )
-        from easywhisper.asr.ct2 import transcribe
     else:
         logger.info(f"Loading Hugging Face model from {transcription_model}...")
         model = WhisperForConditionalGeneration.from_pretrained(
-            transcription_model, torch_dtype=torch.float16
+            transcription_model, torch_dtype=torch.float16, cache_dir=cache_dir
         ).to(device)
-        from easywhisper.asr.hf import transcribe
 
-    processor = WhisperProcessor.from_pretrained(transcription_model)
+    processor = WhisperProcessor.from_pretrained(transcription_model, cache_dir=cache_dir)
     json_dataset = JSONMetadataDataset(
         json_paths=[str(Path(output_vad_dir) / p) for p in json_paths]
     )
@@ -244,6 +264,7 @@ def pipeline(
         prefetch_factor=prefetch_factor_files,
     )
 
+    transcribe = TRANSCRIBE_BACKENDS[backend]
     transcribe(
         model=model,
         processor=processor,
@@ -260,8 +281,13 @@ def pipeline(
         json_paths=[str(Path(output_transcriptions_dir) / p) for p in json_paths]
     )
 
-    model = AutoModelForCTC.from_pretrained(emissions_model).to("cuda").half()
-    processor = Wav2Vec2Processor.from_pretrained(emissions_model)
+    model = AutoModelForCTC.from_pretrained(emissions_model, cache_dir=cache_dir).to("cuda").half()
+    processor = Wav2Vec2Processor.from_pretrained(emissions_model, cache_dir=cache_dir)
+
+    if blank_id is None:
+        blank_id = processor.tokenizer.pad_token_id
+    if word_boundary is None:
+        word_boundary = processor.tokenizer.word_delimiter_token
 
     emissions_pipeline(
         model=model,
@@ -299,7 +325,7 @@ def pipeline(
 
     alignments = alignment_pipeline(
         dataloader=json_dataloader,
-        text_normalizer_fn=text_normalizer,
+        text_normalizer_fn=text_normalizer_fn,
         processor=processor,
         tokenizer=tokenizer,
         emissions_dir=output_emissions_dir,

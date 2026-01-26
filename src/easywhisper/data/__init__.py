@@ -1,3 +1,3 @@
-from easywhisper.data.streaming import StreamingAudioFileDataset
+from easywhisper.data.dataset import StreamingAudioFileDataset
 
 __all__ = ["StreamingAudioFileDataset"]
